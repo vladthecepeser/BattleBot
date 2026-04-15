@@ -8,9 +8,8 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "C:/PlatformIO_Projects/battlebot/include",
-                "C:/PlatformIO_Projects/battlebot/src",
-                "C:/PlatformIO_Projects/battlebot/.pio/libdeps/pico/IBusBM/src",
+                "C:/PlatformIO/BattleBot-ME210/include",
+                "C:/PlatformIO/BattleBot-ME210/src",
                 "C:/Users/gligo/.platformio/packages/framework-arduino-mbed/cores/arduino",
                 "C:/Users/gligo/.platformio/packages/framework-arduino-mbed/cores/arduino/api/deprecated",
                 "C:/Users/gligo/.platformio/packages/framework-arduino-mbed/cores/arduino/api/deprecated-avr-comp",
@@ -62,9 +61,8 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "C:/PlatformIO_Projects/battlebot/include",
-                    "C:/PlatformIO_Projects/battlebot/src",
-                    "C:/PlatformIO_Projects/battlebot/.pio/libdeps/pico/IBusBM/src",
+                    "C:/PlatformIO/BattleBot-ME210/include",
+                    "C:/PlatformIO/BattleBot-ME210/src",
                     "C:/Users/gligo/.platformio/packages/framework-arduino-mbed/cores/arduino",
                     "C:/Users/gligo/.platformio/packages/framework-arduino-mbed/cores/arduino/api/deprecated",
                     "C:/Users/gligo/.platformio/packages/framework-arduino-mbed/cores/arduino/api/deprecated-avr-comp",

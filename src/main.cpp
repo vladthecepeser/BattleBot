@@ -1,7 +1,9 @@
-#include <IBusBM.h>
+#include <Arduino.h>
 #include <cmath>
-using namespace std;
+#include <algorithm>
+#include "IBusPico.h"
 
+IBusPico IBus;
 
 struct Vec
 {
@@ -13,13 +15,13 @@ struct Vec
 Vec transform(const Vec& v)
 {
     // Step 1: rotate by -45 degrees
-    constexpr double invSqrt2 = 1.0 / sqrt(2.0);
+    const double invSqrt2 = 1.0 / sqrt(2.0);
 
     double xr =  (v.x + v.y) * invSqrt2;
     double yr = (-v.x + v.y) * invSqrt2;
 
     // Step 2: normalize by max absolute component
-    double maxAbs = max(abs(xr), abs(yr));
+    double maxAbs = max(abs(xr), fabs(yr));
 
     // Guard against zero (just in case)
     if (maxAbs == 0.0)
@@ -31,6 +33,18 @@ Vec transform(const Vec& v)
 }
 
 
+/*Pins to AVOID:
+GPIO 23, 24, 25, 29
+
+Pins for CAUTION:
+GPIO 0, 1, 2, 3, 15*/
+
+//Pin setup
+int RMotor_IN1 = 4;
+int RMotor_IN2 = 5;
+int LMotor_IN1 = 6;
+int LMotor_IN2 = 7; 
+
 void setup()
 {
     Serial.begin(115200);
@@ -39,22 +53,12 @@ void setup()
     Serial1.begin(115200);   // iBus baudrate
     IBus.begin(Serial1);
 
-    /*Pins to AVOID:
-    GPIO 23, 24, 25, 29
-
-    Pins for CAUTION:
-    GPIO 0, 1, 2, 3, 15*/
-
-
-    int RMotor_IN1 = 4;
-    int RMotor_IN2 = 5;
-    int LMotor_IN1 = 6;
-    int LMotor_IN2 = 7; 
     pinMode(RMotor_IN1, OUTPUT);
     pinMode(RMotor_IN2, OUTPUT);
     pinMode(LMotor_IN1, OUTPUT);
     pinMode(LMotor_IN2, OUTPUT);
 }
+
 
 void loop()
 { 
@@ -77,66 +81,27 @@ void loop()
     Vec motorSpeeds = transform(v);
     
 
-    int RMotorSpeed = static_cast<int>(motorSpeeds.x * 100.0); // Extract right motor speed and scale to -100 to 100
-    int LMotorSpeed = static_cast<int>(motorSpeeds.y * 100.0); // Extract left motor speed and scale to -100 to 100
+    int RMotorSpeed = static_cast<int>(motorSpeeds.x * 255.0); // Extract right motor speed and scale to -100 to 100
+    int LMotorSpeed = static_cast<int>(motorSpeeds.y * 255.0); // Extract left motor speed and scale to -100 to 100
     
     
-    //convert MotorSpeeds to PWM values (0-255) while preserving direction
+    //
     if (RMotorSpeed > 0) {
-        RMotorSpeed *= 2.55; // Scale to 0-255
         analogWrite(RMotor_IN1, RMotorSpeed); // Forward
         digitalWrite(RMotor_IN2, LOW);
     } else if (RMotorSpeed < 0) {
-        RMotorSpeed *= -2.55; // Scale to 0-255
         digitalWrite(RMotor_IN1, LOW); // Backward
         analogWrite(RMotor_IN2, RMotorSpeed);
     }
 
     
     if (LMotorSpeed > 0) {
-        LMotorSpeed *= 2.55; // Scale to 0-255
         analogWrite(LMotor_IN1, LMotorSpeed); // Forward
         digitalWrite(LMotor_IN2, LOW);
     } else if (LMotorSpeed < 0) {
-        LMotorSpeed *= -2.55; // Scale to 0-255
         digitalWrite(LMotor_IN1, LOW); // Backward
         analogWrite(LMotor_IN2, LMotorSpeed);
     }
 
-
-
-
-
-
-
-
-
-
-
-    /*
-    int RMotorSpeed = vertical - horizontal; // Combine vertical and horizontal for right motor
-    int LMotorSpeed = vertical + horizontal; // Combine vertical and horizontal for left motor
-
-    // Constrain motor speeds to be between -100 and 100
-    RMotorSpeed = constrain(RMotorSpeed, -100, 100);        
-    LMotorSpeed = constrain(LMotorSpeed, -100, 100);
-
-    // Set motor directions and speeds
-    if (RMotorSpeed > 0) {
-
-
-
-
-
-        digitalWrite(RMotor_IN1, HIGH); // Forward
-        digitalWrite(RMotor_IN2, LOW);
-    } else if (RMotorSpeed < 0) {
-        digitalWrite(RMotor_IN1, LOW);  // Backward
-        digitalWrite(RMotor_IN2, HIGH);
-    } else {
-        digitalWrite(RMotor_IN1, LOW);  // Stop
-        digitalWrite(RMotor_IN2, LOW);
-    }
-    */
-
+    
 }
