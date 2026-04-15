@@ -1,5 +1,35 @@
 #include <IBusBM.h>
+#include <cmath>
 using namespace std;
+
+
+struct Vec
+{
+    double x;
+    double y;
+};
+
+// Transforms the controller input vector to right/left motor speeds
+Vec transform(const Vec& v)
+{
+    // Step 1: rotate by -45 degrees
+    constexpr double invSqrt2 = 1.0 / sqrt(2.0);
+
+    double xr =  (v.x + v.y) * invSqrt2;
+    double yr = (-v.x + v.y) * invSqrt2;
+
+    // Step 2: normalize by max absolute component
+    double maxAbs = max(abs(xr), abs(yr));
+
+    // Guard against zero (just in case)
+    if (maxAbs == 0.0)
+    {
+        return {0.0, 0.0};
+    }
+
+    return { xr / maxAbs, yr / maxAbs };
+}
+
 
 void setup()
 {
@@ -11,9 +41,11 @@ void setup()
 
     /*Pins to AVOID:
     GPIO 23, 24, 25, 29
-    
+
     Pins for CAUTION:
     GPIO 0, 1, 2, 3, 15*/
+
+
     int RMotor_IN1 = 4;
     int RMotor_IN2 = 5;
     int LMotor_IN1 = 6;
@@ -36,41 +68,75 @@ void loop()
   
     
 
-    int horizontal = map(ch1, 1000, 2000, -100, 100); // Map ch1 to a heading value between -100 and 100
-    int vertical = map(ch2, 1000, 2000, -100, 100);
+    int x = map(ch1, 1000, 2000, -100, 100); // Map ch1 to a heading value between -100 and 100
+    int y = map(ch2, 1000, 2000, -100, 100);
 
-    double LH = horizontal;
-    double RH = -horizontal;
 
-    double LV = vertical;
-    double RV = vertical;
-
-    int signL;
-    if(abs(LH)-abs(LV) >0){
-        signL = 1;
-    }
-    else if(abs(LH)-abs(LV) <0){
-        signL = -1;
-    }
-    else{
-        signL = 0;
-    }
-
-    int signR;
-    if(abs(RH)-abs(RV) >0){
-        signR = 1;
-    }
-    else if(abs(RH)-abs(RV) <0){
-        signR = -1;
-    }
-    else{
-        signR = 0;
-    }
-
-    double L = 0.5((LH + LV) + (LH - LV))*signL;
-    double R = 0.5((RH + RV) + (RH - RV))*signR;
-
+    // Calculate motor speeds based on horizontal and vertical inputs
+    Vec v = {static_cast<double>(x), static_cast<double>(y)};
+    Vec motorSpeeds = transform(v);
     
 
+    int RMotorSpeed = static_cast<int>(motorSpeeds.x * 100.0); // Extract right motor speed and scale to -100 to 100
+    int LMotorSpeed = static_cast<int>(motorSpeeds.y * 100.0); // Extract left motor speed and scale to -100 to 100
+    
+    
+    //convert MotorSpeeds to PWM values (0-255) while preserving direction
+    if (RMotorSpeed > 0) {
+        RMotorSpeed *= 2.55; // Scale to 0-255
+        analogWrite(RMotor_IN1, RMotorSpeed); // Forward
+        digitalWrite(RMotor_IN2, LOW);
+    } else if (RMotorSpeed < 0) {
+        RMotorSpeed *= -2.55; // Scale to 0-255
+        digitalWrite(RMotor_IN1, LOW); // Backward
+        analogWrite(RMotor_IN2, RMotorSpeed);
+    }
+
+    
+    if (LMotorSpeed > 0) {
+        LMotorSpeed *= 2.55; // Scale to 0-255
+        analogWrite(LMotor_IN1, LMotorSpeed); // Forward
+        digitalWrite(LMotor_IN2, LOW);
+    } else if (LMotorSpeed < 0) {
+        LMotorSpeed *= -2.55; // Scale to 0-255
+        digitalWrite(LMotor_IN1, LOW); // Backward
+        analogWrite(LMotor_IN2, LMotorSpeed);
+    }
+
+
+
+
+
+
+
+
+
+
+
+    /*
+    int RMotorSpeed = vertical - horizontal; // Combine vertical and horizontal for right motor
+    int LMotorSpeed = vertical + horizontal; // Combine vertical and horizontal for left motor
+
+    // Constrain motor speeds to be between -100 and 100
+    RMotorSpeed = constrain(RMotorSpeed, -100, 100);        
+    LMotorSpeed = constrain(LMotorSpeed, -100, 100);
+
+    // Set motor directions and speeds
+    if (RMotorSpeed > 0) {
+
+
+
+
+
+        digitalWrite(RMotor_IN1, HIGH); // Forward
+        digitalWrite(RMotor_IN2, LOW);
+    } else if (RMotorSpeed < 0) {
+        digitalWrite(RMotor_IN1, LOW);  // Backward
+        digitalWrite(RMotor_IN2, HIGH);
+    } else {
+        digitalWrite(RMotor_IN1, LOW);  // Stop
+        digitalWrite(RMotor_IN2, LOW);
+    }
+    */
 
 }
