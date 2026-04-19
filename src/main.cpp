@@ -1,160 +1,142 @@
-// #include <Arduino.h>
-// #include <cmath>
-// #include <algorithm>
-
-// struct Vec
-// {
-//     double x;
-//     double y;
-// };
-
-// // Transforms the controller input vector to right/left motor speeds
-// Vec transform(const Vec& v)
-// {
-//     // Step 1: rotate by -45 degrees
-//     const double invSqrt2 = 1.0 / sqrt(2.0);
-
-//     double xr =  (v.x + v.y) * invSqrt2;
-//     double yr = (-v.x + v.y) * invSqrt2;
-
-//     // Step 2: normalize by max absolute component
-//     double maxAbs = max(abs(xr), fabs(yr));
-
-//     // Guard against zero (just in case)
-//     if (maxAbs == 0.0)
-//     {
-//         return {0.0, 0.0};
-//     }
-
-//     return { xr / maxAbs, yr / maxAbs };
-// }
+#include <Arduino.h>
+#include <cmath>
+#include <algorithm>
+#include <ESP32Servo.h>
+using namespace std;
 
 
-// /*Pins to AVOID:
-// GPIO 23, 24, 25, 29
+Servo LM;
+Servo RM;
+Servo WM;
+int LM_Pin = 22;  // connect ESC signal wire here
+int RM_Pin = 21;
+int WM_Pin = 19;
 
-// Pins for CAUTION:
-// GPIO 0, 1, 2, 3, 15*/
+struct Vec
+{
+    double x;
+    double y;
+};
 
-// //Pin setup
-// int RMotor_IN1 = 4;
-// int RMotor_IN2 = 5;
-// int LMotor_IN1 = 6;
-// int LMotor_IN2 = 7; 
-// int WMotor_IN1 = 8;
-// int WMotor_IN2 = 9;
-// int Ntolerance = 25;
-// bool isFlipped = false;
+// Transforms the controller input vector to right/left motor speeds
+Vec transform(const Vec& v)
+{
+    // Step 1: rotate by -45 degrees
+    const double invSqrt2 = 1.0 / sqrt(2.0);
 
-// void setup()
-// {
-//     Serial.begin(115200);
-//     Serial.println();
-  
-//     Serial1.begin(115200);   // iBus baudrate
-//     I.begin(Serial1);
+    double xr =  (v.x + v.y) * invSqrt2;
+    double yr = (-v.x + v.y) * invSqrt2;
 
-//     pinMode(RMotor_IN1, OUTPUT);
-//     pinMode(RMotor_IN2, OUTPUT);
-//     pinMode(LMotor_IN1, OUTPUT);
-//     pinMode(LMotor_IN2, OUTPUT);
-//     pinMode(WMotor_IN1, OUTPUT);
-//     pinMode(WMotor_IN2, OUTPUT);
-//     Serial.println("Initialized!");
-// }
+    // Step 2: normalize by max absolute component
+    double maxAbs = max(abs(xr), fabs(yr));
+
+    // Guard against zero (just in case)
+    if (maxAbs == 0.0)
+    {
+        return {0.0, 0.0};
+    }
+
+    return { xr / maxAbs, yr / maxAbs };
+}
 
 
-// void loop()
-// { 
-//     I.loop(); // must be called often
+/*Pins to AVOID:
+GPIO 23, 24, 25, 29
 
-//     //Channels always between 1000 and 2000
-//     int ch1 = I.readChannel(0); // Right Left/Right
-//     int ch2 = I.readChannel(1); // Right Up/Down
-//     int ch3 = I.readChannel(2); // Left Up/Down (Motor Speed)
-//     int ch5 = I.readChannel(4); // potentiometer (VRA)
-  
+Pins for CAUTION:
+GPIO 0, 1, 2, 3, 15*/
+
+//Pin setup
+int Ntolerance = 25;
+bool isFlipped = false;
+
+void setup()
+{
+    Serial.begin(115200);
+    Serial.println();
+
+    LM.attach(LM_Pin, 1000, 2000);  // min/max pulse width in µs
+    RM.attach(RM_Pin, 1000, 2000);
+    WM.attach(WM_Pin, 1000, 2000);
+
+    LM.writeMicroseconds(1500);     // neutral
+    RM.writeMicroseconds(1500);
+    WM.writeMicroseconds(1500);
+
+    delay(1000);                    // wait for ESC to arm
+    Serial.println("Initialized!");
+}
+
+
+void loop()
+{ 
+
+    //Channels always around 1000 and 2000
+    int ch1 = pulseIn(23, HIGH);
+    int ch2 = pulseIn(22, HIGH);
+    delay(1); //DO NOT DELETE!!!
+    int ch3 = pulseIn(21, HIGH);
+    int ch5 = pulseIn(19, HIGH);
     
-//     // Map channels
-//     int x = map(ch1, 1000, 2000, -100, 100); 
-//     int y = map(ch2, 1000, 2000, -100, 100);
-//     int weaponSpeed = map(ch3, 1000, 2000, 0, 255); //Weapon one-directional
+    //Clamp values to exactly 1000-2000
+    (ch1 < 1000) ? (ch1 = 1000):(ch1=ch1);
+    (ch2 < 1000) ? (ch2 = 1000):(ch2=ch2);
+    (ch3 < 1000) ? (ch3 = 1000):(ch3=ch3);
+    (ch5 < 1000) ? (ch5 = 1000):(ch5=ch5);
 
-
-//     // Calculate motor speeds based on horizontal and vertical inputs
-//     Vec v = {static_cast<double>(x), static_cast<double>(y)};
-//     Vec motorSpeeds = transform(v);
+    (ch1 > 2000) ? (ch1 = 2000):(ch1=ch1);
+    (ch2 > 2000) ? (ch2 = 2000):(ch2=ch2);
+    (ch3 > 2000) ? (ch3 = 2000):(ch3=ch3);
+    (ch5 > 2000) ? (ch5 = 2000):(ch5=ch5);
     
 
-//     int RMotorSpeed = static_cast<int>(motorSpeeds.x * 255.0); // Extract right motor speed and scale to -255 to 255
-//     int LMotorSpeed = static_cast<int>(motorSpeeds.y * 255.0); // Extract left motor speed and scale to -255 to 255
+    // Map x/y channels
+    int x = map(ch1, 1000, 2000, -100, 100); 
+    int y = map(ch2, 1000, 2000, -100, 100);
+    int weaponSpeed = ch3;
+
+
+    // Calculate motor speeds based on horizontal and vertical inputs
+    Vec v = {static_cast<double>(x), static_cast<double>(y)};
+    Vec motorSpeeds = transform(v);
     
-//     //Clamp speeds to prevent analogWrite() error
-//     (RMotorSpeed > 255) ? (RMotorSpeed = 255):(RMotorSpeed = RMotorSpeed);
-//     (RMotorSpeed < -255) ? (RMotorSpeed = -255):(RMotorSpeed = RMotorSpeed);
-//     (LMotorSpeed > 255) ? (LMotorSpeed = 255):(LMotorSpeed = LMotorSpeed);
-//     (LMotorSpeed < -255) ? (LMotorSpeed = -255):(LMotorSpeed = LMotorSpeed);
 
-//     Serial.println("ch1: " + String(ch1) + "ch2: " + String(ch2) + "ch3: " + String(ch3) + "ch5: " + String(ch5));
-//     //Check if robot is flipped
-//     if (ch5 < 1500) isFlipped = false;
-//     else isFlipped = true;
-
+    int RMotorSpeed = static_cast<int>(1000 + motorSpeeds.x * 500.0); // Extract right motor speed and scale to -255 to 255
+    int LMotorSpeed = static_cast<int>(1000 + motorSpeeds.y * 500.0); // Extract left motor speed and scale to -255 to 255
     
-//     //Write to all motors
-//     if (isFlipped == false){
-//         //Write the speed to the right motor
-//         if (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance){
-//             digitalWrite(RMotor_IN1, LOW);
-//             digitalWrite(RMotor_IN2, LOW);}
-//         else if (RMotorSpeed > 0){
-//             analogWrite(RMotor_IN1, RMotorSpeed); // Forward
-//             digitalWrite(RMotor_IN2, LOW);}
-//         else if (RMotorSpeed < 0) {
-//             digitalWrite(RMotor_IN1, LOW); // Backward
-//             analogWrite(RMotor_IN2, -RMotorSpeed);}
-        
-//         //Write the speed to the left motor
-//         if (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance){
-//             digitalWrite(LMotor_IN1, LOW);
-//             digitalWrite(LMotor_IN2, LOW);}
-//         else if (LMotorSpeed > 0) {
-//             analogWrite(LMotor_IN1, LMotorSpeed); // Forward
-//             digitalWrite(LMotor_IN2, LOW);} 
-//         else if (LMotorSpeed < 0) {
-//             digitalWrite(LMotor_IN1, LOW); // Backward
-//             analogWrite(LMotor_IN2, -LMotorSpeed);}
+    //Clamp speeds to prevent writeMicroseconds() error
+    //Should not exceed but being precautionary
+    (RMotorSpeed > 2000) ? (RMotorSpeed = 2000):(RMotorSpeed = RMotorSpeed);
+    (RMotorSpeed < 1000) ? (RMotorSpeed = 1000):(RMotorSpeed = RMotorSpeed);
+    (LMotorSpeed > 2000) ? (LMotorSpeed = 2000):(LMotorSpeed = LMotorSpeed);
+    (LMotorSpeed < 1000) ? (LMotorSpeed = 1000):(LMotorSpeed = LMotorSpeed);
 
-//         //Write to weapon motor
-//         analogWrite(WMotor_IN1, weaponSpeed); 
-//         digitalWrite(WMotor_IN2, LOW);
-//     }
-//     else{
-//         if (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance){
-//             digitalWrite(RMotor_IN1, LOW);
-//             digitalWrite(RMotor_IN2, LOW);}
-//         else if (RMotorSpeed > 0){
-//             analogWrite(RMotor_IN1, LOW); // Forward (flipped)
-//             digitalWrite(RMotor_IN2, RMotorSpeed);}
-//         else if (RMotorSpeed < 0) {
-//             digitalWrite(RMotor_IN1, -RMotorSpeed); // Backward (flipped)
-//             analogWrite(RMotor_IN2, LOW);}
-        
-//         //Write the speed to the left motor
-//         if (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance){
-//             digitalWrite(LMotor_IN1, LOW);
-//             digitalWrite(LMotor_IN2, LOW);}
-//         else if (LMotorSpeed > 0) {
-//             analogWrite(LMotor_IN1, LOW); // Forward (flipped)
-//             digitalWrite(LMotor_IN2, LMotorSpeed);} 
-//         else if (LMotorSpeed < 0) {
-//             digitalWrite(LMotor_IN1, -LMotorSpeed); // Backward (flipped)
-//             analogWrite(LMotor_IN2, LOW);}
-
-//         //Write to weapon motor (flipped)
-//         analogWrite(WMotor_IN1, LOW); 
-//         digitalWrite(WMotor_IN2, weaponSpeed);
-//     }
+    Serial.println("ch1: " + String(ch1) + "ch2: " + String(ch2) + "ch3: " + String(ch3) + "ch5: " + String(ch5));
+    //Check if robot is flipped
+    if (ch5 < 1500) isFlipped = false;
+    else isFlipped = true;
 
     
-// }
+    //Write to all motors
+    if (isFlipped == false){
+        //Assign speeds with deadzone
+        (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance) ? (RM.writeMicroseconds(RMotorSpeed)):(RM.writeMicroseconds(1500));
+        (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance) ? (LM.writeMicroseconds(LMotorSpeed)):(LM.writeMicroseconds(1500));
+
+        //Write to weapon motor
+        WM.writeMicroseconds(weaponSpeed);
+    }
+    else{
+        //Flip speeds
+        RMotorSpeed += -2*(RMotorSpeed - 1500);
+        LMotorSpeed += -2*(LMotorSpeed - 1500);
+        weaponSpeed += -2*(weaponSpeed - 1500);
+
+        //Assign FLIPPED speeds with deadzone
+        (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance) ? (RM.writeMicroseconds(RMotorSpeed)):(RM.writeMicroseconds(1500));
+        (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance) ? (LM.writeMicroseconds(LMotorSpeed)):(LM.writeMicroseconds(1500));
+
+        //Write to weapon motor
+        WM.writeMicroseconds(weaponSpeed);
+    }    
+}
