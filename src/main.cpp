@@ -8,9 +8,19 @@ using namespace std;
 Servo LM;
 Servo RM;
 Servo WM;
-int LM_Pin = 22;  // connect ESC signal wire here
-int RM_Pin = 21;
-int WM_Pin = 19;
+constexpr int LM_Pin = 12;  // connect ESC signal wire here
+constexpr int RM_Pin = 14;
+constexpr int WM_Pin = 27;
+
+constexpr int ch1_Pin = 22;
+constexpr int ch2_Pin = 21;
+constexpr int ch3_Pin = 19;
+constexpr int ch5_Pin = 18;
+
+int ch1;
+int ch2;
+int ch3;
+int ch5;
 
 struct Vec
 {
@@ -48,6 +58,7 @@ GPIO 0, 1, 2, 3, 15*/
 
 //Pin setup
 int Ntolerance = 25;
+int NtolCH = 30;
 bool isFlipped = false;
 
 void setup()
@@ -67,17 +78,32 @@ void setup()
     Serial.println("Initialized!");
 }
 
-
 void loop()
 { 
 
     //Channels always around 1000 and 2000
-    int ch1 = pulseIn(23, HIGH);
-    int ch2 = pulseIn(22, HIGH);
+    ch1 = pulseIn(ch1_Pin, HIGH, 50000);
+    ch2 = pulseIn(ch2_Pin, HIGH, 50000);
     delay(1); //DO NOT DELETE!!!
-    int ch3 = pulseIn(21, HIGH);
-    int ch5 = pulseIn(19, HIGH);
-    
+    ch3 = pulseIn(ch3_Pin, HIGH, 50000);
+    ch5 = pulseIn(ch5_Pin, HIGH, 50000);
+
+
+    //Neutralize all motors if arbitrary signal not present
+    if(ch1 == 0 || ch2 == 0 || ch3 == 0 || ch5 == 0){
+        RM.writeMicroseconds(1500);
+        LM.writeMicroseconds(1500);
+        WM.writeMicroseconds(1500);
+        Serial.println("No signal");
+        return;
+    }
+
+    //Enforce deadzone for channels
+    (ch1 > (1500-NtolCH) && ch1 < (1500+NtolCH)) ? (ch1 = 1500):(ch1 = ch1);
+    (ch2 > (1500-NtolCH) && ch2 < (1500+NtolCH)) ? (ch2 = 1500):(ch2 = ch2);
+    (ch3 > (1500-NtolCH) && ch3 < (1500+NtolCH)) ? (ch3 = 1500):(ch3 = ch3);
+    (ch5 > (1500-NtolCH) && ch5 < (1500+NtolCH)) ? (ch5 = 1500):(ch5 = ch5);
+
     //Clamp values to exactly 1000-2000
     (ch1 < 1000) ? (ch1 = 1000):(ch1=ch1);
     (ch2 < 1000) ? (ch2 = 1000):(ch2=ch2);
@@ -101,8 +127,8 @@ void loop()
     Vec motorSpeeds = transform(v);
     
 
-    int RMotorSpeed = static_cast<int>(1000 + motorSpeeds.x * 500.0); // Extract right motor speed and scale to -255 to 255
-    int LMotorSpeed = static_cast<int>(1000 + motorSpeeds.y * 500.0); // Extract left motor speed and scale to -255 to 255
+    int RMotorSpeed = static_cast<int>(1500 + motorSpeeds.y * 500.0); // Extract right motor speed and scale to -255 to 255
+    int LMotorSpeed = static_cast<int>(1500 + motorSpeeds.x * 500.0); // Extract left motor speed and scale to -255 to 255
     
     //Clamp speeds to prevent writeMicroseconds() error
     //Should not exceed but being precautionary
@@ -111,7 +137,14 @@ void loop()
     (LMotorSpeed > 2000) ? (LMotorSpeed = 2000):(LMotorSpeed = LMotorSpeed);
     (LMotorSpeed < 1000) ? (LMotorSpeed = 1000):(LMotorSpeed = LMotorSpeed);
 
-    Serial.println("ch1: " + String(ch1) + "ch2: " + String(ch2) + "ch3: " + String(ch3) + "ch5: " + String(ch5));
+    //DIAGNOSTICS
+    ////////////////////////
+    Serial.print("ch1: " + String(ch1) + " ch2: " + String(ch2) + " ch3: " + String(ch3) + " ch5: " + String(ch5) + " || ");
+    Serial.print("Left Speed: " + String(LMotorSpeed) + " Right Speed: " + String(RMotorSpeed) + " || ");
+    Serial.print("x: " + String(x) + " y: " + String(y) + " || ");
+    Serial.println("Transform x: " + String(motorSpeeds.x) + " Transform y: " + String(motorSpeeds.y));
+    ////////////////////////
+
     //Check if robot is flipped
     if (ch5 < 1500) isFlipped = false;
     else isFlipped = true;
@@ -120,8 +153,8 @@ void loop()
     //Write to all motors
     if (isFlipped == false){
         //Assign speeds with deadzone
-        (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance) ? (RM.writeMicroseconds(RMotorSpeed)):(RM.writeMicroseconds(1500));
-        (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance) ? (LM.writeMicroseconds(LMotorSpeed)):(LM.writeMicroseconds(1500));
+        (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance) ? (RM.writeMicroseconds(1500)):(RM.writeMicroseconds(RMotorSpeed));
+        (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance) ? (LM.writeMicroseconds(1500)):(LM.writeMicroseconds(LMotorSpeed));
 
         //Write to weapon motor
         WM.writeMicroseconds(weaponSpeed);
@@ -133,8 +166,8 @@ void loop()
         weaponSpeed += -2*(weaponSpeed - 1500);
 
         //Assign FLIPPED speeds with deadzone
-        (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance) ? (RM.writeMicroseconds(RMotorSpeed)):(RM.writeMicroseconds(1500));
-        (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance) ? (LM.writeMicroseconds(LMotorSpeed)):(LM.writeMicroseconds(1500));
+        (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance) ? (RM.writeMicroseconds(1500)):(RM.writeMicroseconds(RMotorSpeed));
+        (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance) ? (LM.writeMicroseconds(1500)):(LM.writeMicroseconds(LMotorSpeed));
 
         //Write to weapon motor
         WM.writeMicroseconds(weaponSpeed);
