@@ -2,20 +2,25 @@
 #include <cmath>
 #include <algorithm>
 #include <ESP32Servo.h>
+#include "esp_timer.h"
 using namespace std;
 
 
 Servo LM;
 Servo RM;
 Servo WM;
-constexpr int LM_Pin = 12;  // connect ESC signal wire here
-constexpr int RM_Pin = 14;
+constexpr int LM_Pin = 4;  // connect ESC signal wire here
+constexpr int RM_Pin = 2;
 constexpr int WM_Pin = 27;
 
-constexpr int ch1_Pin = 22;
-constexpr int ch2_Pin = 21;
-constexpr int ch3_Pin = 19;
-constexpr int ch5_Pin = 18;
+constexpr int ch1_Pin = 13;
+constexpr int ch2_Pin = 12;
+constexpr int ch3_Pin = 14;
+constexpr int ch5_Pin = 27;
+
+int64_t PTime;
+int LPastSpeed;
+int RPastSpeed;
 
 int ch1;
 int ch2;
@@ -59,6 +64,7 @@ GPIO 0, 1, 2, 3, 15*/
 //Pin setup
 int Ntolerance = 25;
 int NtolCH = 30;
+int MScale = 500;
 bool isFlipped = false;
 
 void setup()
@@ -76,6 +82,11 @@ void setup()
 
     delay(1000);                    // wait for ESC to arm
     Serial.println("Initialized!");
+
+    PTime = esp_timer_get_time();
+    LPastSpeed = 1500;
+    RPastSpeed = 1500;
+    
 }
 
 void loop()
@@ -113,8 +124,7 @@ void loop()
     (ch1 > 2000) ? (ch1 = 2000):(ch1=ch1);
     (ch2 > 2000) ? (ch2 = 2000):(ch2=ch2);
     (ch3 > 2000) ? (ch3 = 2000):(ch3=ch3);
-    (ch5 > 2000) ? (ch5 = 2000):(ch5=ch5);
-    
+    (ch5 > 2000) ? (ch5 = 2000):(ch5=ch5);    
 
     // Map x/y channels
     int x = map(ch1, 1000, 2000, -100, 100); 
@@ -127,15 +137,40 @@ void loop()
     Vec motorSpeeds = transform(v);
     
 
-    int RMotorSpeed = static_cast<int>(1500 + motorSpeeds.y * 500.0); // Extract right motor speed and scale to -255 to 255
-    int LMotorSpeed = static_cast<int>(1500 + motorSpeeds.x * 500.0); // Extract left motor speed and scale to -255 to 255
+    double RMotorSpeed = static_cast<double>(1500.0 + motorSpeeds.y * MScale); // Extract right motor speed and scale to -255 to 255
+    double LMotorSpeed = static_cast<double>(1500.0 + motorSpeeds.x * MScale); // Extract left motor speed and scale to -255 to 255
     
     //Clamp speeds to prevent writeMicroseconds() error
     //Should not exceed but being precautionary
-    (RMotorSpeed > 2000) ? (RMotorSpeed = 2000):(RMotorSpeed = RMotorSpeed);
-    (RMotorSpeed < 1000) ? (RMotorSpeed = 1000):(RMotorSpeed = RMotorSpeed);
-    (LMotorSpeed > 2000) ? (LMotorSpeed = 2000):(LMotorSpeed = LMotorSpeed);
-    (LMotorSpeed < 1000) ? (LMotorSpeed = 1000):(LMotorSpeed = LMotorSpeed);
+    (RMotorSpeed > 2000.0) ? (RMotorSpeed = 2000.0):(RMotorSpeed = RMotorSpeed);
+    (RMotorSpeed < 1000.0) ? (RMotorSpeed = 1000.0):(RMotorSpeed = RMotorSpeed);
+    (LMotorSpeed > 2000.0) ? (LMotorSpeed = 2000.0):(LMotorSpeed = LMotorSpeed);
+    (LMotorSpeed < 1000.0) ? (LMotorSpeed = 1000.0):(LMotorSpeed = LMotorSpeed);
+
+
+    int64_t dt = esp_timer_get_time() - PTime;
+    double dsR = static_cast<double>(RMotorSpeed)-static_cast<double>(RPastSpeed);
+    double dsL = static_cast<double>(LMotorSpeed)-static_cast<double>(LPastSpeed);
+
+    //Want: 500 in 1 second --> 0.0005 units per microsecond
+
+    if (dsR > 0 && dsR/dt > 0.0005){
+        RMotorSpeed = RPastSpeed + 0.0005*dt;
+    }
+    else if(dsR < 0 && dsR/dt < -0.0005){
+        RMotorSpeed = RPastSpeed - 0.0005*dt;
+    }
+
+    if (dsL > 0 && dsL/dt > 0.0005){
+        LMotorSpeed = LPastSpeed + 0.0005*dt;
+    }
+    else if(dsL < 0 && dsL/dt < -0.0005){
+        LMotorSpeed = LPastSpeed - 0.0005*dt;
+    }
+
+    PTime = esp_timer_get_time();
+    RPastSpeed = RMotorSpeed;
+    LPastSpeed = LMotorSpeed;
 
     //DIAGNOSTICS
     ////////////////////////
@@ -144,7 +179,8 @@ void loop()
     Serial.print("x: " + String(x) + " y: " + String(y) + " || ");
     Serial.println("Transform x: " + String(motorSpeeds.x) + " Transform y: " + String(motorSpeeds.y));
     ////////////////////////
-
+    
+    
     //Check if robot is flipped
     if (ch5 < 1500) isFlipped = false;
     else isFlipped = true;
