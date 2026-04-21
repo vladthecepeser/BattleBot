@@ -34,6 +34,32 @@ struct Vec
     double y;
 };
 
+Vec transformFlipped(const Vec& v)
+{
+    // Step 0: preserve zero
+    if (v.y == 0.0 && v.x == 0.0)
+    {
+        return {0.0, 0.0};
+    }
+
+    // Step 1: rotate by -45 degrees
+    constexpr double invSqrt2 = 0.7071067811865475244; // 1 / sqrt(2)
+
+    double xr =  (v.y + v.x) * invSqrt2;
+    double yr = (-v.y + v.x) * invSqrt2;
+
+    // Step 2: normalize by dominant component (L∞ norm)
+    double maxAbs = std::max(std::fabs(xr), std::fabs(yr));
+
+    xr /= maxAbs;
+    yr /= maxAbs;
+
+    // Step 3: remap axes to match required ordering
+    // (this is the critical correction)
+    return { xr, -yr };
+}
+
+
 // Transforms the controller input vector to right/left motor speeds
 Vec transform(const Vec& v)
 {
@@ -44,15 +70,23 @@ Vec transform(const Vec& v)
     double yr = (-v.x + v.y) * invSqrt2;
 
     // Step 2: normalize by max absolute component
-    double maxAbs = max(abs(xr), fabs(yr));
+    double maxAbs = max(fabs(xr), fabs(yr));
 
-    // Guard against zero (just in case)
     if (maxAbs == 0.0)
     {
         return {0.0, 0.0};
     }
 
-    return { xr / maxAbs, yr / maxAbs };
+    double nx = xr / maxAbs;
+    double ny = yr / maxAbs;
+
+    // Step 3: fix lower-half ordering
+    if (v.y < 0.0)
+    {
+        std::swap(nx, ny);
+    }
+
+    return { nx, ny };
 }
 
 
@@ -127,12 +161,25 @@ void loop()
     int x = map(ch1, 1000, 2000, -100, 100); 
     int y = map(ch2, 1000, 2000, -100, 100);
     //int weaponSpeed = ch3;
-
-
-    // Calculate motor speeds based on horizontal and vertical inputs
-    Vec v = {static_cast<double>(x), static_cast<double>(y)};
-    Vec motorSpeeds = transform(v);
     
+
+    //Check if robot is flipped
+    if (ch3 < 1500) isFlipped = false;
+    else isFlipped = true;
+
+    Serial.print(String(ch3) + " || ");
+    // Calculate motor speeds based on orientation, horizontal, and vertical inputs
+    Vec motorSpeeds = {0, 0};
+    if(!isFlipped){
+        Vec v = {static_cast<double>(x), static_cast<double>(y)};
+        motorSpeeds = transform(v);
+        Serial.println("Left: " + String(motorSpeeds.x) + " Right: " + String(motorSpeeds.y));
+    }
+    else{
+        Vec v = {static_cast<double>(x), static_cast<double>(y)};
+        motorSpeeds = transformFlipped(v);
+        Serial.println("(Flipped) -- Left: " + String(motorSpeeds.x) + " Right: " + String(motorSpeeds.y));
+    }
 
     double RMotorSpeed = static_cast<double>(1500.0 + motorSpeeds.y * MScale); // Extract right motor speed and scale to -255 to 255
     double LMotorSpeed = static_cast<double>(1500.0 + motorSpeeds.x * MScale); // Extract left motor speed and scale to -255 to 255
@@ -145,11 +192,10 @@ void loop()
     (LMotorSpeed < 1000.0) ? (LMotorSpeed = 1000.0):(LMotorSpeed = LMotorSpeed);
 
 
+    //Slew Speeds to prevent brownout
     int64_t dt = esp_timer_get_time() - PTime;
     double dsR = static_cast<double>(RMotorSpeed)-static_cast<double>(RPastSpeed);
     double dsL = static_cast<double>(LMotorSpeed)-static_cast<double>(LPastSpeed);
-
-    //Want: 500 in 1 second --> 0.0005 units per microsecond
 
     if (dsR > 0 && dsR/dt > maxAcc){
         RMotorSpeed = RPastSpeed + maxAcc*dt;
@@ -171,38 +217,17 @@ void loop()
 
     //DIAGNOSTICS
     ////////////////////////
-    Serial.print("ch1: " + String(ch1) + " ch2: " + String(ch2) + " ch3: " + String(ch3) + " || ");
-    Serial.print("Left Speed: " + String(LMotorSpeed) + " Right Speed: " + String(RMotorSpeed) + " || ");
-    Serial.print("x: " + String(x) + " y: " + String(y) + " || ");
-    Serial.println("Transform x: " + String(motorSpeeds.x) + " Transform y: " + String(motorSpeeds.y));
+    // Serial.print("ch1: " + String(ch1) + " ch2: " + String(ch2) + " ch3: " + String(ch3) + " || ");
+    // Serial.print("Left Speed: " + String(LMotorSpeed) + " Right Speed: " + String(RMotorSpeed) + " || ");
+    // Serial.print("Flipped: " + String(isFlipped) + " || ");
+    // //Serial.print("x: " + String(x) + " y: " + String(y) + " || ");
+    // Serial.println("Transform x: " + String(motorSpeeds.x) + " Transform y: " + String(motorSpeeds.y));
+
     ////////////////////////
-    
-    
-    //Check if robot is flipped
-    if (ch3 < 1500) isFlipped = false;
-    else isFlipped = true;
 
     
-    //Write to all motors
-    if (isFlipped == false){
-        //Assign speeds with deadzone
-        (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance) ? (RM.writeMicroseconds(1500)):(RM.writeMicroseconds(RMotorSpeed));
-        (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance) ? (LM.writeMicroseconds(1500)):(LM.writeMicroseconds(LMotorSpeed));
+    //Assign speeds with deadzone
+    (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance) ? (RM.writeMicroseconds(1500)):(RM.writeMicroseconds(RMotorSpeed));
+    (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance) ? (LM.writeMicroseconds(1500)):(LM.writeMicroseconds(LMotorSpeed));
 
-        //Write to weapon motor
-        //WM.writeMicroseconds(weaponSpeed);
-    }
-    else{
-        //Flip speeds
-        RMotorSpeed += -2*(RMotorSpeed - 1500);
-        LMotorSpeed += -2*(LMotorSpeed - 1500);
-        //weaponSpeed += -2*(weaponSpeed - 1500);
-
-        //Assign FLIPPED speeds with deadzone
-        (RMotorSpeed > -Ntolerance && RMotorSpeed < Ntolerance) ? (RM.writeMicroseconds(1500)):(RM.writeMicroseconds(RMotorSpeed));
-        (LMotorSpeed > -Ntolerance && LMotorSpeed < Ntolerance) ? (LM.writeMicroseconds(1500)):(LM.writeMicroseconds(LMotorSpeed));
-
-        //Write to weapon motor
-        //WM.writeMicroseconds(weaponSpeed);
-    }    
 }
